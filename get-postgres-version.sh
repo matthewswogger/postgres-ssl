@@ -1,13 +1,13 @@
 #!/bin/bash
 # get-postgres-version.sh
-# Usage: ./get-postgres-version.sh 16
-# Returns: 16.10 (latest minor version for PostgreSQL 16)
+# Usage: ./get-postgres-version.sh 18
+# Returns: 18.x (latest minor version for PostgreSQL 18)
 
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <major_version>" >&2
-    echo "Example: $0 16" >&2
+    echo "Example: $0 18" >&2
     exit 1
 fi
 

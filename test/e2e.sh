@@ -2,7 +2,7 @@
 # test/e2e.sh — end-to-end test harness for the pgBackRest archive + PITR flow.
 #
 # Spins up a local MinIO bucket, builds the postgres-ssl-pitr image for a
-# single PG version (default 17, override with PG_VERSION=18 etc.), and
+# single PG version (default 18, override with PG_VERSION=19 etc.), and
 # walks every assertion in the PR test plan in sequence. Each assertion is
 # a `t_*` function; failure aborts the run and dumps the relevant container
 # logs. Final exit code is the count of failed tests.
@@ -17,7 +17,7 @@
 
 set -uo pipefail
 
-PG_VERSION="${PG_VERSION:-17}"
+PG_VERSION="${PG_VERSION:-18}"
 IMAGE="postgres-ssl-pitr:${PG_VERSION}"
 NET="pgssl-test-net"
 MINIO="minio-test"
