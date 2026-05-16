@@ -1,8 +1,11 @@
 name: Build and Push PostgreSQL Images
 
 on:
-  schedule:
-    - cron: "0 0 * * 1"  # Every Monday at midnight UTC
+  # schedule:
+  #   - cron: "0 0 * * 1"  # Every Monday at midnight UTC
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 env:
