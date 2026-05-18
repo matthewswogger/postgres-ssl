@@ -50,9 +50,8 @@ PGDATA="${PGDATA:-/var/lib/postgresql/data}"
 STATE_FILE="$PGDATA/.pgbackrest_backup_state"
 GAP_MARKER="$PGDATA/.pgbackrest_gap_pending"
 
-# POLL_INTERVAL_SECONDS / GAP_RESOLVED_GRACE_SECONDS are env-overridable so
-# the e2e harness can exercise gap-recovery in <1 min instead of 5+. The
-# defaults are conservative; nothing user-facing advertises these knobs.
+# POLL_INTERVAL_SECONDS / GAP_RESOLVED_GRACE_SECONDS are internal tuning
+# overrides (not advertised in README). Defaults are conservative.
 POLL_INTERVAL_SECONDS="${WAL_BACKUP_POLL_INTERVAL_SECONDS:-60}"
 
 # Until the first full lands the loop polls on a tighter cadence so a race
@@ -69,9 +68,8 @@ FULL_INTERVAL_HOURS="${WAL_BACKUP_FULL_INTERVAL_HOURS:-168}"
 DIFF_INTERVAL_HOURS="${WAL_BACKUP_DIFF_INTERVAL_HOURS:-24}"
 
 # Resolved cadence in seconds. WAL_BACKUP_FULL_INTERVAL_SECONDS overrides
-# the hours setting — bash arithmetic precludes fractional hours, so the
-# e2e harness needs a second-level knob to exercise retention rollover
-# inside a single test cycle. 0 means "no periodic full" (gap-recovery
+# the hours setting — bash arithmetic precludes fractional hours. 0 means
+# "no periodic full" (gap-recovery
 # and NEEDS_INITIAL_BACKUP still fire); any positive value sets the
 # cadence. Defaults to FULL_INTERVAL_HOURS * 3600 when unset, preserving
 # existing prod behavior.
