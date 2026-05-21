@@ -21,31 +21,16 @@ fi
 
 echo "Fetching latest PostgreSQL $MAJOR_VERSION version..." >&2
 
-# Query Docker Hub API for the latest version of this major release
-# We look for tags that are major.minor format (no alpine, bookworm, etc)
-# Paginate through results to find older major versions
-LATEST_VERSION=""
-NEXT_URL="https://hub.docker.com/v2/repositories/library/postgres/tags?page_size=100"
+# Use docker-library/postgres versions.json (same source as official image builds).
+# Docker Hub's tags API is unreliable in CI (often returns 504 HTML/plain-text errors).
+VERSIONS_URL="https://raw.githubusercontent.com/docker-library/postgres/master/versions.json"
+RESPONSE=$(curl -fsSL "$VERSIONS_URL")
 
-while [ -n "$NEXT_URL" ] && [ -z "$LATEST_VERSION" ]; do
-  RESPONSE=$(curl -s "$NEXT_URL")
-
-  LATEST_VERSION=$(echo "$RESPONSE" | \
-    jq -r --arg major "$MAJOR_VERSION" '.results[] |
-      select(.name | test("^" + $major + "\\.\\d+$")) |
-      .name' | \
-    sort -V | \
-    tail -1)
-
-  # Get next page URL if we didn't find our version
-  if [ -z "$LATEST_VERSION" ]; then
-    NEXT_URL=$(echo "$RESPONSE" | jq -r '.next // empty')
-  fi
-done
+LATEST_VERSION=$(echo "$RESPONSE" | jq -r --arg major "$MAJOR_VERSION" '.[$major].version // empty')
 
 if [ -z "$LATEST_VERSION" ]; then
   echo "Error: Could not find version for PostgreSQL $MAJOR_VERSION" >&2
-  echo "Available major versions might be different. Check https://hub.docker.com/_/postgres" >&2
+  echo "Check $VERSIONS_URL for available major versions." >&2
   exit 1
 fi
 
