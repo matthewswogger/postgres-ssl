@@ -1,12 +1,12 @@
 ARG POSTGRES_VERSION=18.4
 FROM postgres:${POSTGRES_VERSION}
 
-# Install OpenSSL, sudo, pgvector, pgbackrest, and ca-certificates (needed
+# Install OpenSSL, sudo, pgvector, pg_cron, pgbackrest, and ca-certificates (needed
 # so pgbackrest can verify the TLS cert of the S3 endpoint — postgres base
 # image disables apt Recommends, so ca-certificates isn't pulled implicitly)
 RUN apt-get update \
     && apt-get install -y \
-        openssl sudo ca-certificates pgbackrest postgresql-18-pgvector postgresql-18-http \
+        openssl sudo ca-certificates pgbackrest postgresql-18-pgvector postgresql-18-http postgresql-18-cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Allow the postgres user to execute certain commands as root without a password
@@ -20,7 +20,6 @@ COPY --chmod=755 pgbackrest-init.sh /docker-entrypoint-initdb.d/99-pgbackrest-in
 COPY --chmod=755 pgbackrest-archive-push-wrapper.sh /usr/local/bin/pgbackrest-archive-push-wrapper.sh
 COPY --chmod=755 pgbackrest-backup-watcher.sh /usr/local/bin/pgbackrest-backup-watcher.sh
 COPY --chmod=755 wrapper.sh /usr/local/bin/wrapper.sh
-# COPY --chmod=755 extensions.sql /docker-entrypoint-initdb.d/extensions.sql
 
 ENTRYPOINT ["wrapper.sh"]
 CMD ["postgres", "-p", "5432", "-c", "listen_addresses=*"]

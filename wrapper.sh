@@ -49,32 +49,41 @@ if [ -f "$POSTGRES_CONF_FILE" ] && [ ! -f "$SSL_DIR/server.crt" ]; then
   bash "$INIT_SSL_SCRIPT"
 fi
 
-# Adds pg_stat_statements to shared_preload_libraries in a config file
-# Usage: add_pg_stat_statements <config_file>
-add_pg_stat_statements() {
+# Append a library to shared_preload_libraries in a config file.
+# Usage: append_shared_preload_library <config_file> <library>
+append_shared_preload_library() {
   local config_file="$1"
+  local lib="$2"
   local current_libs
   # Extract value - handles quoted ('val', "val") and unquoted (val) formats
   current_libs=$(grep -E "^[[:space:]]*shared_preload_libraries" "$config_file" 2>/dev/null | tail -1 | sed "s/.*=[[:space:]]*//; s/^['\"]//; s/['\"].*$//; s/[[:space:]]*$//")
   if [ -n "$current_libs" ]; then
-    echo "shared_preload_libraries = '${current_libs},pg_stat_statements'" >> "$config_file"
+    echo "shared_preload_libraries = '${current_libs},${lib}'" >> "$config_file"
   else
-    echo "shared_preload_libraries = 'pg_stat_statements'" >> "$config_file"
+    echo "shared_preload_libraries = '${lib}'" >> "$config_file"
   fi
 }
 
-# Ensure pg_stat_statements is in shared_preload_libraries for existing databases
-# This handles databases created before this setting was added
-AUTO_CONF_FILE="$PGDATA/postgresql.auto.conf"
-if [ -f "$POSTGRES_CONF_FILE" ] && ! grep -q "pg_stat_statements" "$POSTGRES_CONF_FILE"; then
-  echo "Adding pg_stat_statements to shared_preload_libraries..."
-  add_pg_stat_statements "$POSTGRES_CONF_FILE"
-  # Only update auto.conf if it has shared_preload_libraries set (which would override postgresql.conf)
-  # and doesn't already have pg_stat_statements
-  if grep -q "^[[:space:]]*shared_preload_libraries" "$AUTO_CONF_FILE" 2>/dev/null && ! grep -q "pg_stat_statements" "$AUTO_CONF_FILE" 2>/dev/null; then
-    add_pg_stat_statements "$AUTO_CONF_FILE"
+# Ensure a library is listed in shared_preload_libraries for existing databases.
+# Usage: ensure_shared_preload_library <library>
+ensure_shared_preload_library() {
+  local lib="$1"
+  local auto_conf="$PGDATA/postgresql.auto.conf"
+  [ ! -f "$POSTGRES_CONF_FILE" ] && return 0
+  if grep -q "$lib" "$POSTGRES_CONF_FILE"; then
+    return 0
   fi
-fi
+  echo "Adding ${lib} to shared_preload_libraries..."
+  append_shared_preload_library "$POSTGRES_CONF_FILE" "$lib"
+  # Only update auto.conf if it has shared_preload_libraries set (which would override postgresql.conf)
+  if grep -q "^[[:space:]]*shared_preload_libraries" "$auto_conf" 2>/dev/null && ! grep -q "$lib" "$auto_conf" 2>/dev/null; then
+    append_shared_preload_library "$auto_conf" "$lib"
+  fi
+}
+
+# pg_cron requires shared_preload_libraries and CREATE EXTENSION (see pg_cron README).
+ensure_shared_preload_library "pg_stat_statements"
+ensure_shared_preload_library "pg_cron"
 
 # -----------------------------------------------------------------------------
 # WAL archiving + PITR (tool-agnostic env contract)
@@ -530,6 +539,27 @@ clear_pgbackrest_state_if_disabled() {
 # plus user-supplied init SQL can easily run a few minutes before the
 # real postmaster binds TCP. If we time out, first WAL push fails until
 # the next boot retries — recoverable, but louder than necessary.
+# Ensure pg_cron metadata exists in the cron.database_name database (default
+# postgres). Runs after every boot once Postgres accepts TCP connections.
+bootstrap_pg_cron() {
+  (
+    deadline=$(( $(date +%s) + 600 ))
+    until pg_isready -h 127.0.0.1 -p 5432 -U postgres -q 2>/dev/null; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "pg_cron: timed out waiting for Postgres before CREATE EXTENSION" >&2
+        exit 1
+      fi
+      sleep 2
+    done
+
+    if gosu postgres psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pg_cron;"; then
+      echo "pg_cron: extension ensured"
+    else
+      echo "pg_cron: CREATE EXTENSION failed (will retry on next boot)" >&2
+    fi
+  ) &
+}
+
 bootstrap_pgbackrest_stanza() {
   # pgBackRest 2.58 rejects --repo on stanza-create. In single-repo mode
   # there's nothing to scope; in dual-repo (fork) mode the source's repo2
@@ -854,6 +884,7 @@ fi
 unset PGHOST
 unset PGPORT
 
+bootstrap_pg_cron
 bootstrap_pgbackrest_stanza
 fork_pgbackrest_backup_watcher
 
