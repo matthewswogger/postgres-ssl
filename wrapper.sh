@@ -560,6 +560,27 @@ bootstrap_pg_cron() {
   ) &
 }
 
+# http is installed via postgresql-18-http; ensure CREATE EXTENSION on every boot
+# (initdb SQL alone is not enough for existing volumes or misnamed init scripts).
+bootstrap_http() {
+  (
+    deadline=$(( $(date +%s) + 600 ))
+    until pg_isready -h 127.0.0.1 -p 5432 -U postgres -q 2>/dev/null; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "http: timed out waiting for Postgres before CREATE EXTENSION" >&2
+        exit 1
+      fi
+      sleep 2
+    done
+
+    if gosu postgres psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS http;"; then
+      echo "http: extension ensured"
+    else
+      echo "http: CREATE EXTENSION failed (will retry on next boot)" >&2
+    fi
+  ) &
+}
+
 bootstrap_pgbackrest_stanza() {
   # pgBackRest 2.58 rejects --repo on stanza-create. In single-repo mode
   # there's nothing to scope; in dual-repo (fork) mode the source's repo2
@@ -885,6 +906,7 @@ unset PGHOST
 unset PGPORT
 
 bootstrap_pg_cron
+bootstrap_http
 bootstrap_pgbackrest_stanza
 fork_pgbackrest_backup_watcher
 
